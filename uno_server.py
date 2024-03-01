@@ -1,5 +1,6 @@
 
 import socket
+import threading
 
 main_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -18,22 +19,62 @@ def startSocket():
 
     while True:
         clientSocket, address = main_socket.accept()
-        print(f"Connection from {address} has been established!")
 
-        player = UnoPlayer(socket=clientSocket, address=address)
-        player.sendMessage("YOY")
+        thread = threading.Thread(target=handle_client, args=(clientSocket, address))
+        thread.start()
 
-        players.append(player)
+        command_input = input("> ")
 
 
-class UnoPlayer:
+def handle_client(connection, address):
+    print(f"Connection from {address} has been established!")
+    player = UnoPlayer(connection, address)
+    players.append(player)
+
+    connected = True
+    while connected:
+        message = connection.recv(1024).decode("utf-8")
+        if message == "!DISCONNECT":
+            connected = False
+
+            print(f"[{player.name}: {address}] has disconnected")
+            break
+
+        if message.startswith("!"):
+            handle_command(player, message)
+
+            print(f"[{player.name}: {address}] send a command: '{message}'")
+        else:
+            print(f"[{player.name}: {address}] send a message: '{message}'")
+
+    connection.close()
+
+def handle_command(player, command_string):
+    args = command_string.split(" ")
+    if args[0] == "!NAME":
+        player.setName(args[1])
+
+def broadCast(message):
+    for i in range(0, len(players)):
+        players[i].sendMessage(message)
+
+class CommandExecutor:
+    def __init__(self, executor_priority):
+        self.executor_priority = executor_priority
+
+class UnoPlayer(CommandExecutor):
     def __init__(self, socket, address):
+        super().__init__("PLAYER")
         self.clientSocket = socket
         self.address = address
+        self.name = str(address)
 
     def sendMessage(self, message):
-        main_socket.send(bytes(message, "utf-8"))
+        self.clientSocket.send(bytes(message, "utf-8"))
+
+    def setName(self, name):
+        self.name = name
+
 
 
 startSocket()
-
