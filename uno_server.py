@@ -1,4 +1,3 @@
-
 import socket
 import threading
 
@@ -7,6 +6,8 @@ main_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 port = 65535
 max_players = 2
 players = []
+openSocket = True
+
 
 def startSocket():
     main_socket.bind((socket.gethostname(), port))
@@ -17,50 +18,84 @@ def startSocket():
     print("\n")
     print("Console:")
 
-    while True:
+    while openSocket:
         clientSocket, address = main_socket.accept()
 
-        thread = threading.Thread(target=handle_client, args=(clientSocket, address))
+        player = UnoPlayer(clientSocket, address)
+        print("Testing 'openSocket'")
+        players.append(player)
+
+        thread = threading.Thread(target=handle_client, args=(player, address, clientSocket))
         thread.start()
 
-        command_input = input("> ")
+    close_server()
 
 
-def handle_client(connection, address):
+def close_server():
+    print("TEST CLOSE_SERVER")
+
+    main_socket.close()
+    exit()
+
+
+def handle_client(player, address, connection):
     print(f"Connection from {address} has been established!")
-    player = UnoPlayer(connection, address)
-    players.append(player)
 
     connected = True
     while connected:
         message = connection.recv(1024).decode("utf-8")
-        if message == "!DISCONNECT":
+        print("Testing 'connected'")
+
+        if message == "!disconnect":
             connected = False
 
             print(f"[{player.name}: {address}] has disconnected")
             break
 
         if message.startswith("!"):
-            handle_command(player, message)
+            player.handle_command(message)
 
             print(f"[{player.name}: {address}] send a command: '{message}'")
+        elif message.startswith("INFO"):
+            args = message.split(" ")
+
+            player.setName(args[1])
         else:
             print(f"[{player.name}: {address}] send a message: '{message}'")
 
     connection.close()
 
-def handle_command(player, command_string):
-    args = command_string.split(" ")
-    if args[0] == "!NAME":
-        player.setName(args[1])
 
-def broadCast(message):
+def broadcast(message):
+    print("TEST BROAD COMMAND")
+
     for i in range(0, len(players)):
         players[i].sendMessage(message)
+
+
+def invalid_command(command, message):
+    print(f"Invalid use of command: '{command}'")
+    print(f"{message}")
+
+
+def handle_command(command_string):
+    args = command_string.split(" ")
+    print(args)
+    print("TEST HANDLE COMMAND")
+
+    if args[0] == "!stop":
+        if args[1] == None:
+            openSocket = False
+        else:
+            invalid_command(args[0], "Please confirm the stop command with '!stop confirm'")
+    elif args[0] == "!broad":
+        broadcast(args[1])
+
 
 class CommandExecutor:
     def __init__(self, executor_priority):
         self.executor_priority = executor_priority
+
 
 class UnoPlayer(CommandExecutor):
     def __init__(self, socket, address):
@@ -75,6 +110,15 @@ class UnoPlayer(CommandExecutor):
     def setName(self, name):
         self.name = name
 
+    def handle_command(self, command_string):
+        args = command_string.split(" ")
+        if args[0] == "!NAME":
+            self.setName(args[1])
 
 
 startSocket()
+
+while True:
+    command_input = input("> ")
+    if command_input != "" and command_input.startswith("!"):
+        handle_command(command_input)
